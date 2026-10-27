@@ -21,7 +21,7 @@ result, err := manager.Ingest(ctx, upload, media.Request{
 // posts/9-1760000000-0_md.jpg   1000×667
 ```
 
-## Pure Go, and why that is a constraint rather than a preference
+## Pure Go, with no external binaries
 
 spatie's image-optimizer shells out to `jpegoptim`, `pngquant`, `optipng` and
 `svgo`. An application deployed as a single binary either carries four host
@@ -36,7 +36,7 @@ is routinely half the size at quality 82 with no visible difference.
 The dependency is the standard library plus `golang.org/x/image`, for the
 resampling kernels and the WebP decoder. A test asserts it.
 
-## Metadata, and the trap under it
+## Metadata and orientation
 
 Re-encoding discards EXIF, which it has to: a photograph taken on a phone
 carries **GPS coordinates**, a device serial number and a timestamp, and
@@ -51,16 +51,16 @@ orientation turns every portrait photograph on its side**: a privacy fix that
 visibly breaks the feed.
 
 `media/exif` therefore reads exactly one field, the pixels are turned, and
-then re-encoding throws the rest away. It is deliberately not a general EXIF
-library.
+then re-encoding throws the rest away. It is not a general EXIF library and
+does not try to be.
 
 ## Nothing is upscaled
 
 A 32-pixel avatar asked for a 256-pixel variant stays 32 pixels. Enlarging
 adds bytes and no detail.
 
-Which is why **a caller must read the dimensions in the result rather than
-assume the ones it asked for**. `FitCover` applies the same rule to the box:
+So **read the dimensions in the result rather than assuming the ones you
+asked for**. `FitCover` applies the same rule to the box:
 a 40×40 avatar slot given a 30×50 photograph yields 30×30 — the requested
 shape, at the size the source can supply.
 
@@ -95,8 +95,8 @@ JPEG or PNG.
 Re-encoding one writes its poster frame and throws the animation away —
 silently, because the result is a valid image of the right size. So the
 submitted bytes are preserved for an animated GIF whatever `Original` says,
-and `Result.OriginalRaw` reports it. The variants are stills, which is the
-honest rendition of an animation in a thumbnail slot.
+and `Result.OriginalRaw` tells you that happened. The variants are stills,
+which is what an animation can be in a thumbnail slot.
 
 Detecting animation is why there is a GIF block walker in here. The only
 function in the standard library that reports a frame count is
@@ -113,9 +113,9 @@ deflate that asks for ten gigabytes of RGBA. Checking the size after decoding
 is checking it after the damage.
 
 `MaxPixels` defaults to forty megapixels, which covers every phone and most
-cameras. The guard multiplies as `int64` on purpose: two 32-bit dimensions
-multiply past `MaxInt32`, so a narrower guard overflows into a small positive
-number and admits the one image it exists to refuse.
+cameras. The guard multiplies as `int64`, because two 32-bit dimensions multiply past
+`MaxInt32` and a narrower guard would overflow into a small positive number —
+admitting the one image it exists to refuse.
 
 ## Nothing partial survives a failure
 
@@ -201,11 +201,11 @@ pass, and the fixtures that make the interesting cases testable at all: a JPEG
 carrying an orientation tag, a PNG whose alpha channel is present but unused,
 an animated GIF, and a decode bomb.
 
-The bomb fixture is worth a note, because the first version of it was wrong:
-`image/png` verifies the IHDR checksum in `DecodeConfig`, so a rewritten width
-without a recomputed CRC is rejected as a corrupt file and never reaches the
-pixel guard. The guard cannot be tested with a damaged header — only with a
-well-formed lie.
+If you write a decode-bomb fixture of your own, note that `image/png`
+verifies the IHDR checksum in `DecodeConfig`: a rewritten width without a
+recomputed CRC is rejected as a corrupt file and never reaches the pixel
+guard. The guard can only be tested with a well-formed lie, not a damaged
+header.
 
 ```bash
 go test ./...
