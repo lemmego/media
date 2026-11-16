@@ -4,7 +4,7 @@ go 1.27
 
 require (
 	github.com/lemmego/api v0.14.0
-	github.com/lemmego/fsys v0.2.0
+	github.com/lemmego/fsys v0.2.1
 	golang.org/x/image v0.47.0
 )
 
